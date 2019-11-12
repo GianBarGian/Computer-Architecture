@@ -2,6 +2,8 @@
 
 import sys
 
+
+
 class CPU:
     """Main CPU class."""
 
@@ -10,6 +12,13 @@ class CPU:
         self.ram = [0]*256
         self.reg = [0]*8
         self.PC = 0
+        self.address = 0
+        self.branchtable = {
+            0b00000001: self.HLT_handle,
+            0b10000010: self.LDI_handle,
+            0b01000111: self.PRN_handle,
+            0b10100010: self.MUL_handle,
+        }
 
     def ram_read(self, address):
         return self.ram[address]
@@ -18,26 +27,13 @@ class CPU:
         self.ram[address] = value
 
 
-    def load(self):
+    def load(self, command):
         """Load a program into memory."""
+        self.ram[self.address] = command
+        self.address += 1
 
-        address = 0
-
-        # For now, we've just hardcoded a program:
-
-        program = [
-            # From print8.ls8
-            0b10000010, # LDI R0,8
-            0b00000000,
-            0b00001000,
-            0b01000111, # PRN R0
-            0b00000000,
-            0b00000001, # HLT
-        ]
-
-        for instruction in program:
-            self.ram[address] = instruction
-            address += 1
+    def reset_address(self):
+        self.address = 0
 
 
     def alu(self, op, reg_a, reg_b):
@@ -45,6 +41,8 @@ class CPU:
 
         if op == "ADD":
             self.reg[reg_a] += self.reg[reg_b]
+        elif op == "MUL":
+            self.reg[reg_a] *= self.reg[reg_b]
         #elif op == "SUB": etc
         else:
             raise Exception("Unsupported ALU operation")
@@ -69,24 +67,23 @@ class CPU:
 
         print()
 
+    def HLT_handle(self, *args):
+        sys.exit(1)
+    def LDI_handle(self, operand_a, operand_b, *args):
+        self.reg[operand_a] = operand_b
+    def PRN_handle(self, operand_a, *args):
+        print(self.reg[operand_a])
+    def MUL_handle(self, operand_a, operand_b, *args):
+        self.alu('MUL', operand_a, operand_b) 
+
     def run(self):
         while True:
 
             IR = self.ram_read(self.PC)
+            operands_num = IR >> 6
             operand_a = self.ram_read(self.PC + 1)
             operand_b = self.ram_read(self.PC + 2)
-
-            HLT = 0b00000001
-            LDI = 0b10000010
-            PRN = 0b01000111
-
-            if IR == HLT:
-                break
-            if IR == LDI:
-                self.reg[operand_a] = operand_b
-                self.PC += 2
-            if IR == PRN:
-                print(self.reg[operand_a])
-                self.PC += 1
-            
-            self.PC +=1
+          
+            self.branchtable[IR](operand_a, operand_b)
+           
+            self.PC += (operands_num + 1)
